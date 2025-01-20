@@ -5,12 +5,23 @@ import time
 import os
 from datetime import datetime
 import json
+import asyncio
+from gtts import gTTS
+import os
+import pygame
 
 import speech_recognition as sr
 import pyttsx3
 from io import BytesIO
 from pocketsphinx import AudioFile, Pocketsphinx, get_model_path
 import tempfile
+from googletrans import Translator
+
+# Initialize translator
+translator = Translator()
+
+# Initialize pygame mixer for audio playback
+pygame.mixer.init()
 
 # Initialize text-to-speech engine
 #tts_engine = pyttsx3.init()
@@ -234,6 +245,30 @@ def recognize_speech():
         except sr.RequestError as e:
             return f"Could not request results; {e}"
 
+def listen_for_speech(prompt=None, keyword=None, language="ne-NP"):
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        if prompt:
+            print(prompt)
+        recognizer.adjust_for_ambient_noise(source)
+        st.info("Listening... Please speak.")
+        audio = recognizer.listen(source, timeout=15)
+
+    try:
+        # Recognize speech in the specified language
+        text = recognizer.recognize_google(audio, language=language)
+        print(f"Recognized: {text}")
+        if keyword:
+            return keyword.lower() in text.lower()
+        return text
+    except sr.UnknownValueError:
+        print("Could not understand the audio")
+        return False if keyword else ""
+    except sr.RequestError:
+        print("Could not request results from speech recognition service")
+        return False if keyword else ""
+
+
 # def recognize_speech_offline():
 #     try:
 #         st.info("Listening... Please speak.")
@@ -269,7 +304,7 @@ def recognize_speech():
 #         st.error(f"Error in offline speech recognition: {str(e)}")
 #         return "Error in processing audio."
 
-def speak_text(text):
+def speak_text(text, language="en-US"):
     # Convert text to audio and play it
     try:
         # Use pyttsx3 to convert text to speech and play it directly
@@ -286,21 +321,35 @@ def speak_text(text):
     # audio = AudioSegment.from_file("response.mp3", format="mp3")
     # play(audio)
 
-# def speak_text_gTTS(text):
-#     try:
-#         # Convert text to speech using gTTS
-#         tts = gTTS(text, lang="en")
-        
-#         # Save TTS output to an in-memory buffer
-#         audio_buffer = BytesIO()
-#         tts.write_to_fp(audio_buffer)
-#         audio_buffer.seek(0)  # Reset buffer position
-        
-#         # Play audio directly from memory
-#         audio = AudioSegment.from_file(audio_buffer, format="mp3")
-#         play(audio)
-#     except Exception as e:
-#         st.error(f"Error in playing voice response: {str(e)}")
+async def translate_text(text, dest_lang):
+    async with Translator() as translator:
+
+        translated_text = (await translator.translate(text, dest=dest_lang)).text
+    
+    return translated_text
+
+
+def text_to_speech(text, lang='ne'):
+    tts = gTTS(text=text, lang=lang)
+    tts.save("response.mp3")
+    
+    pygame.mixer.music.load("response.mp3")
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy():
+        pygame.time.Clock().tick(10)
+    
+    pygame.mixer.music.unload()  # Unload the music to release the file
+    
+    # Attempt to delete the file after it is no longer in use
+    try:
+        os.remove("response.mp3")
+    except PermissionError:
+        print("Error: Unable to delete 'response.mp3'. Retrying...")
+        time.sleep(1)
+        try:
+            os.remove("response.mp3")
+        except Exception as e:
+            print(f"Failed to delete 'response.mp3': {e}")
 
 def main():
     st.title("Infomax GPT")
@@ -316,21 +365,29 @@ def main():
      # Button to enable voice input
     
     if st.button("Use Voice Input"):
-        voice_message = recognize_speech()
+        #voice_message = recognize_speech()
+        voice_message_nepali = listen_for_speech(prompt="Listening",language="ne-NP")
+        voice_message = asyncio.run(translate_text(voice_message_nepali, "en"))
+        print(voice_message)
         if voice_message:
             with st.chat_message("user"):
                 st.write(voice_message)
-                speak_text("The question asked is:"+ voice_message)
+                
             st.session_state.messages.append({"role": "user", "content": voice_message})
             response = chat(voice_message)
             st.session_state.messages.append({"role": "assistant", "content": response})
             with st.chat_message("assistant"):
                 st.write_stream(response_generator(response))
-                speak_text(response)
+                #speak_text(response)
+                nepali_response = asyncio.run(translate_text(response, "ne"))
+                #print(nepali_response)
+                #speak_text(nepali_response)
+                text_to_speech(nepali_response)
 
     if user_input:
         with st.chat_message("user"):
             st.write(user_input)
+            #speak_text("The question asked is:"+ voice_message)
         st.session_state.messages.append({"role": "user", "content": user_input})
         messages = "\n".join(msg["content"] for msg in st.session_state.messages)
         # print(messages)
@@ -338,7 +395,10 @@ def main():
         st.session_state.messages.append({"role": "assistant", "content": response})
         with st.chat_message("assistant"):
             st.write_stream(response_generator(response))
-            speak_text(response)
+            nepali_response = asyncio.run(translate_text(response, "ne"))
+            #print(nepali_response)
+            #speak_text(nepali_response)
+            text_to_speech(nepali_response)
 
     elif st.session_state['messages'] is None:
         st.info("Enter a prompt or load chat above to start the conversation")
@@ -366,3 +426,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    pygame.mixer.quit()
