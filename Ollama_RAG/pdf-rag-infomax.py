@@ -37,8 +37,8 @@ all_pages.extend(pages)
 
 # Extract text from the PDF file 
 #text = pages[1].page_content
-#text = " ".join([page.page_content for page in all_pages])
-text = pages[2].page_content
+text = " ".join([page.page_content for page in all_pages])
+#text = pages[2].page_content
 print(f"Text extracted from the PDF file: \n {text}\n")
 
 #Prepare the prompt for the model 

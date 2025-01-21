@@ -11,6 +11,7 @@ async def translate_text():
         result = await translator.translate('veritas lux mea', src='la')
         print(result)  # <Translated src=la dest=en text=The truth is my light pronunciation=The truth is my light>
 
-#asyncio.run(translate_text())
+asyncio.run(translate_text())
 
-translate_text()
+#translate_text()
+
